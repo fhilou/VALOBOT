@@ -68,7 +68,7 @@ async def send_daily_message():
 @client.event
 async def on_ready():
     print(f'Connecté en tant que {client.user}')
-    schedule.every().day.at("11:55").do(lambda: asyncio.create_task(send_daily_message()))
+    schedule.every().day.at("12:00").do(lambda: asyncio.create_task(send_daily_message()))
     
     while True:
         schedule.run_pending()
