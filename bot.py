@@ -1,3 +1,7 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 import discord
 import os
 import asyncio
@@ -5,10 +9,11 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from keep_alive import keep_alive
 from api import fetch_elo
-from commands.elo import Elo
-from commands.recap import Recap
-from commands.test import Test
-from commands.help import Help
+import commands.elo
+import commands.recap
+import commands.test
+import commands.help
+
 
 # Charger les variables d'environnement
 dotenv_path = ".env"
@@ -20,10 +25,10 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Ajouter les commandes
-bot.add_cog(Elo(bot))
-bot.add_cog(Recap(bot))
-bot.add_cog(Test(bot))
-bot.add_cog(Help(bot))
+bot.add_cog(commands.elo.Elo(bot))
+bot.add_cog(commands.recap.Recap(bot))
+bot.add_cog(commands.test.Test(bot))
+bot.add_cog(commands.help.Help(bot))
 
 @bot.event
 async def on_ready():
