@@ -57,7 +57,7 @@ def save_elo_data(data):
 async def scheduled_message():
     """Envoie un message à une heure précise."""
     now = datetime.now().time()
-    target_time = time(10, 0)  # Heure de l'envoi (9h00 du matin)
+    target_time = time(9, 0)  # Heure de l'envoi (9h00 du matin)
     if now.hour == target_time.hour and now.minute == target_time.minute:
         channel = bot.get_channel(CHANNEL_ID)
         if channel:
@@ -116,5 +116,4 @@ async def on_ready():
 
 keep_alive()
 bot.run(TOKEN)
-
 
