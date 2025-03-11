@@ -1,5 +1,10 @@
+import sys
 import os
-import discord
+
+commands_path = os.path.join(os.path.dirname(__file__), "commands")
+sys.path.append(commands_path)
+
+print("Chemin des commandes ajouté :", commands_path)
 from discord.ext import commands
 from dotenv import load_dotenv
 from keep_alive import keep_alive
