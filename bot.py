@@ -60,7 +60,7 @@ async def save_daily_rr():
         if rr:
             daily_rr[f"{player['username']}#{player['tag']}"] = rr
 
-@tasks.loop(time=datetime.time(11, 55))  # Envoi du récap à 10h30
+@tasks.loop(time=datetime.time(12, 00))  # Envoi du récap à 10h30
 async def send_daily_message():
     await bot.wait_until_ready()
     channel = bot.get_channel(CHANNEL_ID)
