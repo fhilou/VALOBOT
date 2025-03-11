@@ -44,12 +44,9 @@ async def get_valorant_rank(username, tag):
             elo_change = data["data"].get("mmr_change_to_last_game", "N/A")
             
             elo_change_text = f"(+{elo_change} au dernier match)" if isinstance(elo_change, int) and elo_change > 0 else f"({elo_change} au dernier match)"
-            return {
-                "rank": f"{username}#{tag} est **{current_rank}** avec {rank_progress} RR {elo_change_text}",
-                "rr": data["data"]["mmr"]
-            }
+            return f"{username}#{tag} est **{current_rank}** avec {rank_progress} RR {elo_change_text}"
         else:
-            return None
+            return f"Impossible de récupérer les données de {username}#{tag}"
     except Exception as e:
         return f"Erreur lors de la récupération des données : {e}"
 
@@ -59,11 +56,11 @@ async def save_daily_rr():
     daily_rr = {}
 
     for player in TRACKED_PLAYERS:
-        rank_data = await get_valorant_rank(player["username"], player["tag"])
-        if rank_data:
-            daily_rr[f"{player['username']}#{player['tag']}"] = rank_data["rr"]
+        rr = await get_valorant_rank(player["username"], player["tag"])
+        if rr:
+            daily_rr[f"{player['username']}#{player['tag']}"] = rr
 
-@tasks.loop(time=datetime.time(11, 50))  # Envoi du récap à 10h30
+@tasks.loop(time=datetime.time(11, 55))  # Envoi du récap à 10h30
 async def send_daily_message():
     await bot.wait_until_ready()
     channel = bot.get_channel(CHANNEL_ID)
@@ -76,7 +73,7 @@ async def send_daily_message():
         *[get_valorant_rank(player["username"], player["tag"]) for player in TRACKED_PLAYERS]
     )
     
-    message = "**Résumé quotidien des ELO :**\n" + "\n".join([msg["rank"] for msg in elo_messages if msg])
+    message = "**Résumé quotidien des ELO :**\n" + "\n".join(elo_messages)
     await channel.send(message)
     print("Message quotidien envoyé !")
 
@@ -89,35 +86,30 @@ async def elo(ctx, player_tag: str):
     username, tag = player_tag.split("#")
     await ctx.send(f"Recherche de l'ELO pour {username}#{tag}...")
     elo_info = await get_valorant_rank(username, tag)
-    await ctx.send(elo_info["rank"] if elo_info else "Erreur lors de la récupération des données.")
+    await ctx.send(elo_info)
 
 @bot.command(name="recap")
 async def recap(ctx):
     if not daily_rr:
-        await ctx.send("Plus 0 RR")
+        await ctx.send("0 RR")
         return
     
     recap_message = "**📊 Récapitulatif de la journée :**\n\n"
-    total_rr_change = 0
     
     for username_tag, initial_rr in daily_rr.items():
-        rank_data = await get_valorant_rank(*username_tag.split("#"))
-        if rank_data:
-            current_rr = rank_data["rr"]
-            rr_change = current_rr - initial_rr
-            total_rr_change += rr_change
-            recap_message += f"**{username_tag}** : {initial_rr} ➝ {current_rr} ({'+' if rr_change >= 0 else ''}{rr_change})\n"
+        current_rr = await get_valorant_rank(*username_tag.split("#"))
+        if current_rr:
+            recap_message += f"**{username_tag}** : {initial_rr} ➝ {current_rr}\n"
         else:
             recap_message += f"**{username_tag}** : Erreur lors de la récupération des données ❌\n"
     
-    if total_rr_change == 0:
-        recap_message += "\nPlus 0 RR aujourd'hui."
-    else:
-        recap_message += f"\n**Total RR gagné ou perdu aujourd'hui :** {'+' if total_rr_change >= 0 else ''}{total_rr_change} RR"
-    
     await ctx.send(recap_message)
 
-save_daily_rr.start()
-send_daily_message.start()
+@bot.event
+async def on_ready():
+    print(f"Connecté en tant que {bot.user.name}")
+    save_daily_rr.start()
+    send_daily_message.start()
+
 bot.run(TOKEN)
 
