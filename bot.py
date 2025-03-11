@@ -1,10 +1,10 @@
 import sys
 import os
 
-# Ajout du chemin du dossier commands
-commands_path = os.path.join(os.path.dirname(__file__), "commands")
-sys.path.append(commands_path)
-print("Chemin des commandes ajouté :", commands_path)
+# Ajout du chemin du dossier cmds (ex-commands)
+cmds_path = os.path.join(os.path.dirname(__file__), "cmds")
+sys.path.append(cmds_path)
+print("Chemin des commandes ajouté :", cmds_path)
 
 # Importation des modules
 import discord
@@ -12,10 +12,10 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from keep_alive import keep_alive
 from api import fetch_elo  # Si ce fichier existe
-import commands.elo
-import commands.recap
-import commands.test
-import commands.help
+import cmds.elo
+import cmds.recap
+import cmds.test
+import cmds.help
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -26,10 +26,10 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Ajouter les commandes
-bot.add_cog(commands.elo.Elo(bot))
-bot.add_cog(commands.recap.Recap(bot))
-bot.add_cog(commands.test.Test(bot))
-bot.add_cog(commands.help.Help(bot))
+bot.add_cog(cmds.elo.Elo(bot))
+bot.add_cog(cmds.recap.Recap(bot))
+bot.add_cog(cmds.test.Test(bot))
+bot.add_cog(cmds.help.Help(bot))
 
 @bot.event
 async def on_ready():
@@ -38,4 +38,5 @@ async def on_ready():
 # Garder le bot en vie et le lancer
 keep_alive()
 bot.run(TOKEN)
+
 
