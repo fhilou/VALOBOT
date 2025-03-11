@@ -2,12 +2,11 @@ import discord
 import os
 import asyncio
 import datetime
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import requests
-from flask import Flask, jsonify
-import threading
-from keep_alive import keep_alive  # Importation de ton fichier keep_alive.py
+from flask import Flask
+from threading import Thread
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -56,8 +55,21 @@ async def get_valorant_rank(username, tag):
     except Exception as e:
         return f"Erreur lors de la récupération des données : {e}"
 
+@tasks.loop(time=datetime.time(0, 0))  # Minuit
+async def save_daily_rr():
+    global daily_rr
+    daily_rr = {}
+
+    for player in TRACKED_PLAYERS:
+        rank_data = await get_valorant_rank(player["username"], player["tag"])
+        if rank_data:
+            daily_rr[f"{player['username']}#{player['tag']}"] = rank_data["rr"]
+
+@tasks.loop(time=datetime.time(10, 30))  # Envoi du récap à 10h30
 async def send_daily_message():
+    await bot.wait_until_ready()
     channel = bot.get_channel(CHANNEL_ID)
+    
     if not channel:
         print("Erreur : Channel introuvable")
         return
@@ -84,39 +96,51 @@ async def elo(ctx, player_tag: str):
 @bot.command(name="recap")
 async def recap(ctx):
     if not daily_rr:
-        await ctx.send("Plus 0 RR")
+        await ctx.send("Aucun RR n'a été enregistré aujourd'hui.")
         return
     
     recap_message = "**📊 Récapitulatif de la journée :**\n\n"
-    total_rr_change = 0
     
-    for username_tag, initial_rr in daily_rr.items():
-        rank_data = await get_valorant_rank(*username_tag.split("#"))
+    # Boucle sur les joueurs et leurs RR initialement enregistrés
+    for player in TRACKED_PLAYERS:
+        username_tag = f"{player['username']}#{player['tag']}"
+        initial_rr = daily_rr.get(username_tag)
+
+        if initial_rr is None:
+            recap_message += f"**{username_tag}** : Aucune donnée RR trouvée ❌\n"
+            continue
+
+        rank_data = await get_valorant_rank(player["username"], player["tag"])
         if rank_data:
             current_rr = rank_data["rr"]
             rr_change = current_rr - initial_rr
-            total_rr_change += rr_change
-            recap_message += f"**{username_tag}** : {initial_rr} ➝ {current_rr} ({'+' if rr_change >= 0 else ''}{rr_change})\n"
+            elo = rank_data["rank"]
+            recap_message += f"**{username_tag}** : **{elo}** | {initial_rr} ➝ {current_rr} ({'+' if rr_change >= 0 else ''}{rr_change})\n"
         else:
             recap_message += f"**{username_tag}** : Erreur lors de la récupération des données ❌\n"
     
-    if total_rr_change == 0:
-        recap_message += "\nPlus 0 RR aujourd'hui."
-    else:
-        recap_message += f"\n**Total RR gagné ou perdu aujourd'hui :** {'+' if total_rr_change >= 0 else ''}{total_rr_change} RR"
-    
     await ctx.send(recap_message)
 
-# Flask pour gérer le service web
-app = Flask(__name__)
+# Code Flask pour garder le bot en ligne
+app = Flask('')
 
-@app.route('/send_daily', methods=['GET'])
-def send_daily():
-    asyncio.run(send_daily_message())
-    return jsonify({"message": "Message quotidien envoyé!"})
+@app.route('/')
+def home():
+    return "Le bot est en ligne!"
 
-# Démarrer Flask dans un thread séparé
-keep_alive()  # Démarrer le keep_alive en utilisant ton code existant
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+save_daily_rr.start()
+send_daily_message.start()
+
+# Garder le bot en ligne via Flask
+keep_alive()
 
 bot.run(TOKEN)
+
 
