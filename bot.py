@@ -135,8 +135,11 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-save_daily_rr.start()
-send_daily_message.start()
+@bot.event
+async def on_ready():
+    print(f'{bot.user} a bien démarré!')
+    save_daily_rr.start()
+    send_daily_message.start()
 
 # Garder le bot en ligne via Flask
 keep_alive()
