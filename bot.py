@@ -9,8 +9,7 @@ from keep_alive import keep_alive
 from datetime import datetime, time
 
 # Charger les variables d'environnement
-dotenv_path = ".env"
-load_dotenv(dotenv_path)
+load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 HENRIKDEV_API_KEY = os.getenv("HENRIKDEV_API_KEY")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
@@ -38,7 +37,7 @@ def fetch_elo(username, tag):
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         data = response.json()
-        return data["data"].get("elo", 0)  # Retourne l'elo actuel du joueur
+        return data["data"].get("elo", 0)
     return None
 
 def load_elo_data():
@@ -55,9 +54,9 @@ def save_elo_data(data):
 
 @tasks.loop(minutes=1)
 async def scheduled_message():
-    """Envoie un message à une heure précise."""
+    """Envoie un message à une heure précise (9h00)."""
     now = datetime.now().time()
-    target_time = time(9, 0)  # Heure de l'envoi (9h00 du matin)
+    target_time = time(9, 0)  # Change l'heure ici si besoin
     if now.hour == target_time.hour and now.minute == target_time.minute:
         channel = bot.get_channel(CHANNEL_ID)
         if channel:
@@ -82,7 +81,7 @@ async def recap(ctx):
         if new_elo is not None:
             diff = new_elo - old_elo
             message += f"{username}: {'+' if diff >= 0 else ''}{diff} RR\n"
-            elo_data[username] = new_elo  # Mettre à jour l'elo après le calcul
+            elo_data[username] = new_elo  # Met à jour l'elo après le calcul
     save_elo_data(elo_data)
     await ctx.send(message)
 
@@ -98,22 +97,22 @@ async def test(ctx):
             message += f"{username}: {new_elo} RR\n"
     await ctx.send(message)
 
-@bot.command()
-async def help(ctx):
+@bot.command(name="commands")  # ✅ Correction ici (évite conflit avec "help")
+async def commands_list(ctx):
     """Affiche la liste des commandes disponibles."""
     help_message = (
         "**Liste des commandes :**\n"
         "`!recap` - Affiche les gains/pertes d'elo de la journée.\n"
         "`!test` - Envoie le message du jour avec l'élo actuel des joueurs.\n"
-        "`!help` - Affiche cette aide."
+        "`!commands` - Affiche cette aide."
     )
     await ctx.send(help_message)
 
 @bot.event
 async def on_ready():
-    print(f"Connecté en tant que {bot.user}")
+    print(f"✅ Connecté en tant que {bot.user}")
     scheduled_message.start()  # Démarrer l'envoi programmé
 
-keep_alive()
+keep_alive()  # Démarre le web service Flask
 bot.run(TOKEN)
 
