@@ -91,7 +91,7 @@ async def elo(ctx, arg):
         await ctx.send("Format invalide. Utilisez `/elo Nom#Tag`")
 
 # Commande help
-@bot.command(name="help")
+@bot.command(name="aide")
 async def help_command(ctx):
     help_message = """**Commandes disponibles :**\n
     `/elo Nom#Tag` - Affiche le rang et le RR actuel du joueur\n    `/recap` - Montre l'évolution du RR des joueurs suivis\n    `/help` - Affiche cette aide\n    """
