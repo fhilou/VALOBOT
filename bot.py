@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import requests
 from flask import Flask, jsonify
 import threading
+from keep_alive import keep_alive  # Importation de ton fichier keep_alive.py
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -115,12 +116,7 @@ def send_daily():
     return jsonify({"message": "Message quotidien envoyé!"})
 
 # Démarrer Flask dans un thread séparé
-def run_flask():
-    app.run(port=5000)
-
-# Démarrer Flask dans un thread
-flask_thread = threading.Thread(target=run_flask)
-flask_thread.start()
+keep_alive()  # Démarrer le keep_alive en utilisant ton code existant
 
 bot.run(TOKEN)
 
