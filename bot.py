@@ -1,19 +1,22 @@
 import discord
 import os
+import json
 import asyncio
-import schedule
-from discord.ext import commands
+import requests
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from keep_alive import keep_alive
-import requests
+from datetime import datetime, time
 
-# Charger les variables d'environnement depuis .env
-load_dotenv()
+# Charger les variables d'environnement
+dotenv_path = ".env"
+load_dotenv(dotenv_path)
 TOKEN = os.getenv("DISCORD_TOKEN")
 HENRIKDEV_API_KEY = os.getenv("HENRIKDEV_API_KEY")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
+ELO_FILE = "elo_data.json"
 
-# Joueurs suivis
+# Liste des joueurs suivis
 TRACKED_PLAYERS = [
     {"username": "JokyJokSsj", "tag": "EUW"},
     {"username": "HUNGRYCHARLY", "tag": "EUW"},
@@ -26,84 +29,92 @@ TRACKED_PLAYERS = [
 
 # Configuration du bot
 intents = discord.Intents.default()
-intents.message_content = True
-client = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-async def get_valorant_rank(username, tag):
-    url = f"https://api.henrikdev.xyz/valorant/v1/mmr/eu/{username}/{tag}"
-    headers = {"Authorization": HENRIKDEV_API_KEY}
-    
-    try:
-        response = requests.get(url, headers=headers)
+def fetch_elo(username, tag):
+    """Récupère l'elo d'un joueur via l'API HenrikDev"""
+    url = f"https://api.henrikdev.xyz/valorant/v2/mmr/{tag}/{username}"
+    headers = {"Authorization": f"Bearer {HENRIKDEV_API_KEY}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
         data = response.json()
-        
-        if data["status"] == 200:
-            current_rank = data["data"]["currenttierpatched"]
-            rank_progress = data["data"]["ranking_in_tier"]
-            elo_change = data["data"].get("mmr_change_to_last_game", "N/A")
-            
-            elo_change_text = f"(+{elo_change} RR au dernier match)" if elo_change and elo_change > 0 else f"({elo_change} RR au dernier match)"
-            return f"{username}#{tag} est **{current_rank}** avec {rank_progress} RR {elo_change_text}"
-        else:
-            return f"Impossible de récupérer les données de {username}#{tag}"
-    except Exception as e:
-        return f"Erreur lors de la récupération des données : {e}"
+        return data["data"].get("elo", 0)  # Retourne l'elo actuel du joueur
+    return None
 
-async def send_daily_message():
-    await client.wait_until_ready()
-    channel = client.get_channel(CHANNEL_ID)
-    
-    if not channel:
-        print("Erreur : Channel introuvable")
-        return
-    
-    elo_messages = []
+def load_elo_data():
+    """Charge les données d'elo enregistrées."""
+    if os.path.exists(ELO_FILE):
+        with open(ELO_FILE, "r") as file:
+            return json.load(file)
+    return {}
+
+def save_elo_data(data):
+    """Sauvegarde les nouvelles valeurs d'elo."""
+    with open(ELO_FILE, "w") as file:
+        json.dump(data, file, indent=4)
+
+@tasks.loop(minutes=1)
+async def scheduled_message():
+    """Envoie un message à une heure précise."""
+    now = datetime.now().time()
+    target_time = time(10, 0)  # Heure de l'envoi (9h00 du matin)
+    if now.hour == target_time.hour and now.minute == target_time.minute:
+        channel = bot.get_channel(CHANNEL_ID)
+        if channel:
+            elo_data = load_elo_data()
+            message = "**Réveillez-vous les loosers, c'est l'heure de VALO !**\n"
+            for player in TRACKED_PLAYERS:
+                username = player["username"]
+                new_elo = fetch_elo(username, player["tag"])
+                if new_elo is not None:
+                    message += f"{username}: {new_elo} RR\n"
+            await channel.send(message)
+
+@bot.command()
+async def recap(ctx):
+    """Affiche le récapitulatif des changements d'elo."""
+    elo_data = load_elo_data()
+    message = "**Récapitulatif des gains/pertes d'elo aujourd'hui :**\n"
     for player in TRACKED_PLAYERS:
-        message = await get_valorant_rank(player["username"], player["tag"])
-        elo_messages.append(message)
-    
-    message = "**Résumé quotidien des ELO :**\n" + "\n".join(elo_messages)
-    await channel.send(message)
-    print("Message quotidien envoyé !")
+        username = player["username"]
+        old_elo = elo_data.get(username, 0)
+        new_elo = fetch_elo(username, player["tag"])
+        if new_elo is not None:
+            diff = new_elo - old_elo
+            message += f"{username}: {'+' if diff >= 0 else ''}{diff} RR\n"
+            elo_data[username] = new_elo  # Mettre à jour l'elo après le calcul
+    save_elo_data(elo_data)
+    await ctx.send(message)
 
-@client.event
+@bot.command()
+async def test(ctx):
+    """Envoie le message du jour avec l'élo actuel des joueurs."""
+    elo_data = load_elo_data()
+    message = "**Réveillez-vous les loosers, c'est l'heure de VALO !**\n"
+    for player in TRACKED_PLAYERS:
+        username = player["username"]
+        new_elo = fetch_elo(username, player["tag"])
+        if new_elo is not None:
+            message += f"{username}: {new_elo} RR\n"
+    await ctx.send(message)
+
+@bot.command()
+async def help(ctx):
+    """Affiche la liste des commandes disponibles."""
+    help_message = (
+        "**Liste des commandes :**\n"
+        "`!recap` - Affiche les gains/pertes d'elo de la journée.\n"
+        "`!test` - Envoie le message du jour avec l'élo actuel des joueurs.\n"
+        "`!help` - Affiche cette aide."
+    )
+    await ctx.send(help_message)
+
+@bot.event
 async def on_ready():
-    print(f'Connecté en tant que {client.user}')
-    schedule.every().day.at("10:33").do(lambda: asyncio.create_task(send_daily_message()))
-    
-    while True:
-        schedule.run_pending()
-        await asyncio.sleep(60)
+    print(f"Connecté en tant que {bot.user}")
+    scheduled_message.start()  # Démarrer l'envoi programmé
 
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-    
-    if message.content.lower() == "ping":
-        await message.channel.send("Pong!")
-    
-    elif message.content.startswith("!elo"):
-        parts = message.content.split()
-        if len(parts) == 2 and "#" in parts[1]:
-            username, tag = parts[1].split("#")
-            await message.channel.send(f"Recherche de l'ELO pour {username}#{tag}...")
-            elo_info = await get_valorant_rank(username, tag)
-            await message.channel.send(elo_info)
-        else:
-            await message.channel.send("Format invalide. Utilisez `!elo Nom#Tag`")
-
-    elif message.content.lower() == "!help":
-        help_message = """
-        **Commandes disponibles :**
-        - `!elo Nom#Tag` : Affiche l'ELO du joueur avec le nom d'utilisateur et le tag.
-        - `ping` : Test du bot, il répondra "Pong!".
-        - `!help` : Affiche ce message d'aide.
-        """
-        await message.channel.send(help_message)
-
-# Garder le bot en ligne via Flask
 keep_alive()
+bot.run(TOKEN)
 
-client.run(TOKEN)
 
