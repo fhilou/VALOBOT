@@ -114,7 +114,7 @@ async def send_daily_message():
 async def on_ready():
     print(f'Connecté en tant que {bot.user}')
     save_daily_rr.start()
-    schedule.every().day.at("10:33").do(lambda: asyncio.create_task(send_daily_message()))
+    schedule.every().day.at("11:25").do(lambda: asyncio.create_task(send_daily_message()))
     while True:
         schedule.run_pending()
         await asyncio.sleep(60)
