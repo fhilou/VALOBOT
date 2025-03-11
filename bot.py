@@ -29,9 +29,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# Pour stocker les RR initiaux des joueurs
-initial_rr = {}
-
 async def get_valorant_rank(username, tag):
     url = f"https://api.henrikdev.xyz/valorant/v1/mmr/eu/{username}/{tag}"
     headers = {"Authorization": HENRIKDEV_API_KEY}
@@ -45,16 +42,12 @@ async def get_valorant_rank(username, tag):
             rank_progress = data["data"]["ranking_in_tier"]
             elo_change = data["data"].get("mmr_change_to_last_game", "N/A")
             
-            # Stockage du RR initial du joueur
-            if username + "#" + tag not in initial_rr:
-                initial_rr[username + "#" + tag] = data["data"]["mmr"]
-            
-            elo_change_text = f"(+{elo_change} au dernier match)" if elo_change and elo_change > 0 else f"({elo_change} au dernier match)"
-            return f"{username}#{tag} est **{current_rank}** avec {rank_progress} RR {elo_change_text}", data["data"]["mmr"]
+            elo_change_text = f"(+{elo_change} RR au dernier match)" if elo_change and elo_change > 0 else f"({elo_change} RR au dernier match)"
+            return f"{username}#{tag} est **{current_rank}** avec {rank_progress} RR {elo_change_text}"
         else:
-            return f"Impossible de récupérer les données de {username}#{tag}", None
+            return f"Impossible de récupérer les données de {username}#{tag}"
     except Exception as e:
-        return f"Erreur lors de la récupération des données : {e}", None
+        return f"Erreur lors de la récupération des données : {e}"
 
 async def send_daily_message():
     await client.wait_until_ready()
@@ -66,10 +59,8 @@ async def send_daily_message():
     
     elo_messages = []
     for player in TRACKED_PLAYERS:
-        message, current_rr = await get_valorant_rank(player["username"], player["tag"])
-        if current_rr is not None:
-            rr_change = current_rr - initial_rr.get(f"{player['username']}#{player['tag']}", 0)
-            elo_messages.append(f"{message} | Changement de RR: {'+' if rr_change >= 0 else ''}{rr_change}")
+        message = await get_valorant_rank(player["username"], player["tag"])
+        elo_messages.append(message)
     
     message = "**Résumé quotidien des ELO :**\n" + "\n".join(elo_messages)
     await channel.send(message)
@@ -97,7 +88,7 @@ async def on_message(message):
         if len(parts) == 2 and "#" in parts[1]:
             username, tag = parts[1].split("#")
             await message.channel.send(f"Recherche de l'ELO pour {username}#{tag}...")
-            elo_info, _ = await get_valorant_rank(username, tag)
+            elo_info = await get_valorant_rank(username, tag)
             await message.channel.send(elo_info)
         else:
             await message.channel.send("Format invalide. Utilisez `!elo Nom#Tag`")
@@ -115,5 +106,4 @@ async def on_message(message):
 keep_alive()
 
 client.run(TOKEN)
-
 
