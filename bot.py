@@ -6,6 +6,7 @@ from api import fetch_elo
 from datetime import datetime, time, timedelta
 import pytz
 from keep_alive import keep_alive
+import asyncio  # Ajout important
 
 # Configuration du bot
 intents = discord.Intents.default()
@@ -37,6 +38,9 @@ PARIS_TZ = pytz.timezone("Europe/Paris")
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     print("🚀 Bot prêt à l'emploi !")
+    
+    # Démarrer la tâche automatique après que le bot soit prêt
+    send_morning_message.start()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -96,9 +100,6 @@ async def recap(ctx):
     
     await ctx.send(message)
 
-# Variables pour le message automatique
-morning_channel_id = None
-
 # Commande !test
 @bot.command()
 async def test(ctx):
@@ -112,8 +113,7 @@ async def test(ctx):
 
     await ctx.send(message)
 
-# Remplacer la variable morning_channel_id et la commande setchannel
-# par une récupération directe depuis les variables d'environnement
+# Utiliser la variable d'environnement pour le channel ID
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))  # 0 sera utilisé si la variable n'existe pas
 
 @tasks.loop(minutes=1)
@@ -140,44 +140,17 @@ async def send_morning_message():
         else:
             print(f"⚠️ Impossible de trouver le canal ID: {CHANNEL_ID}")
 
-# Tâche automatique pour envoyer le message du matin
-@tasks.loop(minutes=1)
-async def send_morning_message():
-    """Envoie automatiquement le message tous les jours à 9h heure de Paris"""
-    global morning_channel_id
-    if morning_channel_id is None:
-        return
-    
-    now = datetime.now(PARIS_TZ).time()
-    target_time = time(9, 0)
-    
-    if now.hour == target_time.hour and now.minute == target_time.minute:
-        channel = bot.get_channel(morning_channel_id)
-        if channel:
-            message = "**🎯 Réveillez-vous les loosers, c'est l'heure de VALO !**\n"
-            for player in TRACKED_PLAYERS:
-                username = player["username"]
-                tag = player["tag"]
-                elo = fetch_elo(username, tag)
-                message += f"{username}: {elo if elo is not None else 'N/A'} RR\n"
-            
-            await channel.send(message)
-        else:
-            print("⚠️ Impossible de trouver le canal enregistré.")
-
 @send_morning_message.before_loop
 async def before_morning_message():
-    """Attendre le bon moment avant de démarrer la boucle"""
+    """Attendre que le bot soit prêt avant de démarrer la boucle"""
     await bot.wait_until_ready()
     print("⏳ Message automatique initialisé.")
 
-# Démarrer la tâche automatique
-send_morning_message.start()
-
 # Lancer le service web et le bot
-keep_alive()
-TOKEN = os.getenv("DISCORD_TOKEN")
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("❌ Erreur : Le token du bot est manquant !")
+if __name__ == "__main__":
+    keep_alive()
+    TOKEN = os.getenv("DISCORD_TOKEN")
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("❌ Erreur : Le token du bot est manquant !")
