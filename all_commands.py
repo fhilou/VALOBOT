@@ -77,7 +77,7 @@ class Test(commands.Cog):
         """Attendre le bon moment avant de démarrer la boucle"""
         await self.bot.wait_until_ready()
         now = datetime.now(PARIS_TZ)
-        target = datetime.combine(now.date(), time(9, 0), PARIS_TZ)
+        target = datetime.combine(now.date(), time(11, 30), PARIS_TZ)
 
         if now >= target:
             target += timedelta(days=1)  # 📌 Si l'heure est passée, on vise demain
