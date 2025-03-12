@@ -47,7 +47,6 @@ async def on_command_error(ctx, error):
         await ctx.send(f"⚠️ Une erreur est survenue : {error}")
         print(f"Erreur : {error}")
 
-# Commande !help
 @bot.command(name="help")
 async def help_command(ctx):
     """Affiche la liste des commandes disponibles"""
@@ -56,7 +55,6 @@ async def help_command(ctx):
         "`!elo <username> <tag>` - Affiche l'elo d'un joueur spécifique.\n"
         "`!recap` - Affiche les gains/pertes d'elo de la journée.\n"
         "`!test` - Envoie le message du jour avec l'élo actuel des joueurs.\n"
-        "`!setchannel` - Définit le canal pour le message automatique du matin.\n"
         "`!help` - Affiche cette aide."
     )
     await ctx.send(help_message)
