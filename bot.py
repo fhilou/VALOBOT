@@ -12,6 +12,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Configuration du bot
 intents = discord.Intents.default()
+intents.message_content = True  # Important pour les commandes avec préfixe !
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Configurer les commandes
