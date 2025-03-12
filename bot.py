@@ -25,9 +25,13 @@ bot.remove_command("help")
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
-    setup_commands(bot)  # 📌 Charger toutes les commandes
+    success = setup_commands(bot)  # Charger toutes les commandes
+    
+    # Afficher les commandes disponibles pour vérification
+    commands_list = [command.name for command in bot.commands]
+    print(f"📋 Commandes enregistrées : {commands_list}")
+    
     print("🚀 Bot prêt à l'emploi !")
-
 
 @bot.event
 async def on_command_error(ctx, error):
