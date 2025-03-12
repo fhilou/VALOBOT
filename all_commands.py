@@ -176,3 +176,35 @@ def setup_commands(bot):
     
     print("✅ Commandes chargées avec succès !")
     return True
+# À la fin du fichier, ajoutez ceci
+class Admin(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def reload_commands(self, ctx):
+        """Recharge toutes les commandes (Admin uniquement)"""
+        try:
+            # Rechargez les commandes
+            for cog in list(self.bot.cogs):
+                self.bot.remove_cog(cog)
+            
+            # Rechargez les commandes
+            setup_commands(self.bot)
+            
+            await ctx.send("✅ Toutes les commandes ont été rechargées !")
+        except Exception as e:
+            await ctx.send(f"❌ Erreur lors du rechargement : {e}")
+
+# N'oubliez pas d'ajouter cette classe dans setup_commands
+def setup_commands(bot):
+    # Ajout de toutes les classes de commandes
+    bot.add_cog(Test(bot))
+    bot.add_cog(Elo(bot))
+    bot.add_cog(Help(bot))
+    bot.add_cog(Recap(bot))
+    bot.add_cog(Admin(bot))
+    
+    print("✅ Commandes chargées avec succès !")
+    return True
