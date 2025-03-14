@@ -1,3 +1,4 @@
+
 import discord
 import os
 import json
@@ -8,6 +9,11 @@ import pytz
 from keep_alive import keep_alive
 from dotenv import load_dotenv
 
+# Au début du script bot.py, ajoutez:
+if HENRIKDEV_API_KEY:
+    print("✓ HENRIKDEV_API_KEY trouvée")
+else:
+    print("⚠️ HENRIKDEV_API_KEY non trouvée! Les requêtes API pourraient échouer.")
 # Charger les variables d'environnement
 dotenv_path = ".env"
 load_dotenv(dotenv_path)
