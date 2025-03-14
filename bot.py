@@ -61,22 +61,51 @@ def fetch_elo(username, tag):
         print(f"Tentative de récupération de l'elo pour {username}#{tag}")
             
         url = f"https://api.henrikdev.xyz/valorant/v2/mmr/{tag}/{username}"
-        headers = {"Authorization": f"Bearer {HENRIKDEV_API_KEY}"}
+        
+        # Configurer les headers correctement
+        headers = {}
+        if HENRIKDEV_API_KEY:
+            headers["Authorization"] = f"Bearer {HENRIKDEV_API_KEY}"
         
         print(f"URL de l'API: {url}")
-        response = requests.get(url, headers=headers)
+        
+        # Ajouter un timeout pour éviter des attentes infinies
+        response = requests.get(url, headers=headers, timeout=10)
         
         print(f"Réponse API pour {username}#{tag}: Status {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
-            if "data" in data and "elo" in data["data"]:
-                print(f"Elo trouvé: {data['data']['elo']}")
-                return data["data"]["elo"]  # Retourne l'elo actuel du joueur
+            # Vérifier la structure de la réponse (peut varier selon l'API)
+            if "data" in data:
+                if "elo" in data["data"]:
+                    elo = data["data"]["elo"]
+                    print(f"Elo trouvé: {elo}")
+                    return elo
+                # Structure alternative si l'API a changé
+                elif "current_data" in data["data"] and "ranking_in_tier" in data["data"]["current_data"]:
+                    elo = data["data"]["current_data"]["ranking_in_tier"]
+                    print(f"Elo trouvé (structure alternative): {elo}")
+                    return elo
+                else:
+                    print(f"Structure de données inattendue: {data}")
             else:
                 print(f"Données manquantes dans la réponse: {data}")
+        elif response.status_code == 401:
+            print("Erreur d'authentification API. Vérifiez votre HENRIKDEV_API_KEY.")
+        elif response.status_code == 404:
+            print(f"Joueur non trouvé: {username}#{tag}")
         else:
             print(f"Erreur API: {response.status_code}, {response.text}")
+        return None
+    except requests.exceptions.Timeout:
+        print(f"Timeout lors de la récupération de l'elo pour {username}#{tag}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Erreur de réseau lors de la récupération de l'elo: {str(e)}")
+        return None
+    except json.JSONDecodeError:
+        print(f"Erreur de décodage JSON pour {username}#{tag}")
         return None
     except Exception as e:
         print(f"Exception lors de la récupération de l'elo: {str(e)}")
@@ -98,6 +127,8 @@ async def on_command_error(ctx, error):
         await ctx.send("❌ Commande inconnue. Tape `!help` pour voir les commandes disponibles.")
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(f"❌ Argument manquant: {error.param.name}")
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Vous n'avez pas les permissions nécessaires pour exécuter cette commande.")
     else:
         await ctx.send(f"⚠️ Une erreur est survenue : {error}")
         print(f"Erreur détaillée : {type(error).__name__}: {error}")
@@ -143,12 +174,15 @@ async def elo(ctx, *, player_info: str = None):
             username = parts[0].strip()
             tag = parts[1].strip()
             
+        # Message d'attente pour indiquer que le bot travaille
+        loading_msg = await ctx.send(f"🔍 Recherche de l'elo pour **{username}#{tag}**...")
+            
         # Récupérer l'elo
         elo = fetch_elo(username, tag)
         if elo is not None:
-            await ctx.send(f"**{username}#{tag}** a un elo de **{elo} RR**.")
+            await loading_msg.edit(content=f"**{username}#{tag}** a un elo de **{elo} RR**.")
         else:
-            await ctx.send(f"Impossible de récupérer l'élo de **{username}#{tag}**.")
+            await loading_msg.edit(content=f"Impossible de récupérer l'élo de **{username}#{tag}**. Vérifiez le nom d'utilisateur et le tag.")
             
     except Exception as e:
         await ctx.send(f"❌ Erreur lors de la récupération de l'elo: {str(e)}")
@@ -156,16 +190,30 @@ async def elo(ctx, *, player_info: str = None):
 # Fonction pour charger les données d'elo
 def load_elo_data():
     """Charge les données d'elo enregistrées."""
-    if os.path.exists(ELO_FILE):
-        with open(ELO_FILE, "r") as file:
-            return json.load(file)
+    try:
+        if os.path.exists(ELO_FILE):
+            with open(ELO_FILE, "r") as file:
+                return json.load(file)
+    except json.JSONDecodeError as e:
+        print(f"Erreur lors du chargement du fichier d'elo: {str(e)}")
+        # Créer une sauvegarde du fichier corrompu
+        if os.path.exists(ELO_FILE):
+            backup_file = f"{ELO_FILE}.bak"
+            os.rename(ELO_FILE, backup_file)
+            print(f"Fichier corrompu sauvegardé sous {backup_file}")
+    except Exception as e:
+        print(f"Erreur inattendue lors du chargement du fichier d'elo: {str(e)}")
+    
     return {}
 
 # Fonction pour sauvegarder les données d'elo
 def save_elo_data(data):
     """Sauvegarde les nouvelles valeurs d'elo."""
-    with open(ELO_FILE, "w") as file:
-        json.dump(data, file, indent=4)
+    try:
+        with open(ELO_FILE, "w") as file:
+            json.dump(data, file, indent=4)
+    except Exception as e:
+        print(f"Erreur lors de la sauvegarde des données d'elo: {str(e)}")
 
 # Commande !recap
 @bot.command()
@@ -177,9 +225,12 @@ async def recap(ctx):
         await ctx.send("**Récapitulatif des gains/pertes d'elo aujourd'hui :** Aucune donnée disponible. Utilisez `!initelo` pour initialiser les données.")
         return
         
+    # Message d'attente
+    loading_msg = await ctx.send("⏳ Calcul des gains/pertes d'elo en cours...")
+        
     message = "**Récapitulatif des gains/pertes d'elo aujourd'hui :**\n"
     
-    for player in elo_data.keys():
+    for player in list(elo_data.keys()):
         old_elo = elo_data[player]["start"]
         tag = elo_data[player]["tag"]
         new_elo = fetch_elo(player, tag)
@@ -189,10 +240,10 @@ async def recap(ctx):
             message += f"{player}: {'+' if diff >= 0 else ''}{diff} RR\n"
             elo_data[player]["current"] = new_elo
         else:
-            message += f"{player}: 0 RR (pas de parties jouées ou données indisponibles)\n"
+            message += f"{player}: Données indisponibles\n"
 
     save_elo_data(elo_data)
-    await ctx.send(message)
+    await loading_msg.edit(content=message)
 
 # Commande !initelo
 @bot.command()
@@ -200,7 +251,11 @@ async def recap(ctx):
 async def initelo(ctx):
     """Initialise ou réinitialise les données d'elo pour les joueurs suivis (Admin uniquement)"""
     try:
+        # Message d'attente
+        loading_msg = await ctx.send("⏳ Initialisation des données d'elo en cours...")
+        
         elo_data = {}
+        success_count = 0
         
         for player in TRACKED_PLAYERS:
             username = player["username"]
@@ -213,18 +268,18 @@ async def initelo(ctx):
                     "start": current_elo,
                     "current": current_elo
                 }
+                success_count += 1
         
         save_elo_data(elo_data)
         
-        count = len(elo_data)
-        await ctx.send(f"✅ Données d'elo initialisées pour {count} joueurs.")
-        
         # Afficher les joueurs initialisés
-        if count > 0:
-            message = "**Joueurs suivis:**\n"
+        if success_count > 0:
+            message = f"✅ Données d'elo initialisées pour {success_count}/{len(TRACKED_PLAYERS)} joueurs.\n\n**Joueurs suivis:**\n"
             for player, data in elo_data.items():
                 message += f"{player}: {data['current']} RR\n"
-            await ctx.send(message)
+            await loading_msg.edit(content=message)
+        else:
+            await loading_msg.edit(content="❌ Impossible d'initialiser les données d'elo. Vérifiez la connexion à l'API.")
         
     except Exception as e:
         await ctx.send(f"❌ Erreur lors de l'initialisation des données d'elo: {str(e)}")
@@ -233,11 +288,15 @@ async def initelo(ctx):
 @bot.command()
 async def test(ctx):
     """Envoie le message du matin avec l'elo des joueurs"""
-    message = generate_morning_message()
-    await ctx.send(message)
+    loading_msg = await ctx.send("⏳ Génération du message du matin...")
+    try:
+        message = await generate_morning_message()
+        await loading_msg.edit(content=message)
+    except Exception as e:
+        await loading_msg.edit(content=f"❌ Erreur lors de la génération du message: {str(e)}")
 
 # Fonction pour générer le message du matin
-def generate_morning_message():
+async def generate_morning_message():
     """Génère le message avec l'élo des joueurs"""
     message = "**🎯 Réveillez-vous les loosers, c'est l'heure de VALO !**\n"
     for player in TRACKED_PLAYERS:
@@ -281,6 +340,7 @@ async def setchannel(ctx):
         
     except Exception as e:
         await ctx.send(f"❌ Erreur lors de la définition du canal : {str(e)}")
+        print(f"Erreur détaillée lors de la définition du canal : {str(e)}")
 
 # Commande pour recharger le bot
 @bot.command()
@@ -299,21 +359,25 @@ async def reload(ctx):
 @tasks.loop(minutes=1)
 async def send_morning_message():
     """Envoie automatiquement le message tous les jours à 9h heure de Paris"""
-    if CHANNEL_ID == 0:
-        print("⚠️ Aucun canal défini pour le message automatique")
-        return
-    
-    now = datetime.now(PARIS_TZ).time()
-    target_time = time(9, 0)  # 9h00 du matin
-    
-    if now.hour == target_time.hour and now.minute == target_time.minute:
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            message = generate_morning_message()
-            await channel.send(message)
-            print(f"✅ Message du matin envoyé dans le canal {channel.name}")
-        else:
-            print(f"⚠️ Impossible de trouver le canal ID: {CHANNEL_ID}")
+    try:
+        if CHANNEL_ID == 0:
+            print("⚠️ Aucun canal défini pour le message automatique")
+            return
+        
+        now = datetime.now(PARIS_TZ).time()
+        target_time = time(9, 0)  # 9h00 du matin
+        
+        # Vérifier si c'est l'heure d'envoyer le message
+        if now.hour == target_time.hour and now.minute == target_time.minute:
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                message = await generate_morning_message()
+                await channel.send(message)
+                print(f"✅ Message du matin envoyé dans le canal {channel.name}")
+            else:
+                print(f"⚠️ Impossible de trouver le canal ID: {CHANNEL_ID}")
+    except Exception as e:
+        print(f"❌ Erreur dans la tâche send_morning_message: {str(e)}")
 
 @send_morning_message.before_loop
 async def before_morning_message():
@@ -323,8 +387,13 @@ async def before_morning_message():
 
 # Lancer le service web et le bot
 if __name__ == "__main__":
-    keep_alive()
-    if DISCORD_TOKEN:
-        bot.run(DISCORD_TOKEN)
-    else:
-        print("❌ Erreur : Le token du bot est manquant !")
+    try:
+        keep_alive()
+        if DISCORD_TOKEN:
+            bot.run(DISCORD_TOKEN)
+        else:
+            print("❌ Erreur : Le token du bot est manquant !")
+    except discord.errors.LoginFailure:
+        print("❌ Erreur : Token Discord invalide ou expiré !")
+    except Exception as e:
+        print(f"❌ Erreur lors du démarrage du bot : {str(e)}")
