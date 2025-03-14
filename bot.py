@@ -32,7 +32,25 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 bot.remove_command("help")  # Supprimer la commande help par défaut
 
 # Fichier pour stocker les données d'elo
-ELO_FILE = "elo_data.json"
+import os
+import tempfile
+import json
+
+# Définir un chemin de fichier dans un répertoire temporaire accessible
+temp_dir = tempfile.gettempdir()
+ELO_FILE = os.path.join(temp_dir, "elo_data.json")
+
+# Vérifier si le répertoire temporaire est accessible en écriture
+try:
+    os.access(temp_dir, os.W_OK)
+    print(f"✓ Répertoire temporaire accessible: {temp_dir}")
+except Exception as e:
+    print(f"⚠️ Problème d'accès au répertoire temporaire: {str(e)}")
+    # Fallback à /tmp si disponible
+    if os.path.exists("/tmp") and os.access("/tmp", os.W_OK):
+        temp_dir = "/tmp"
+        ELO_FILE = os.path.join(temp_dir, "elo_data.json")
+        print(f"✓ Utilisation du répertoire /tmp comme alternative")
 
 # Liste des joueurs suivis
 TRACKED_PLAYERS = [
