@@ -73,6 +73,8 @@ except (ValueError, TypeError):
     CHANNEL_ID = 0
 
 # Fonction pour récupérer l'elo d'un joueur
+# Remplacez la fonction fetch_elo actuelle par celle-ci:
+
 def fetch_elo(username, tag):
     """Récupère l'elo d'un joueur via l'API HenrikDev"""
     try:
@@ -102,21 +104,50 @@ def fetch_elo(username, tag):
         
         if response.status_code == 200:
             data = response.json()
-            # Vérifier la structure de la réponse (peut varier selon l'API)
+            
+            # Imprimer la réponse complète pour le débogage
+            print(f"Structure complète de la réponse JSON: {json.dumps(data, indent=2)}")
+            
+            # Essayer différentes structures possibles de la réponse
             if "data" in data:
+                # Structure 1: data -> elo
                 if "elo" in data["data"]:
                     elo = data["data"]["elo"]
-                    print(f"Elo trouvé: {elo}")
+                    print(f"Elo trouvé (structure 1): {elo}")
                     return elo
-                # Structure alternative si l'API a changé
+                    
+                # Structure 2: data -> current_data -> ranking_in_tier
                 elif "current_data" in data["data"] and "ranking_in_tier" in data["data"]["current_data"]:
                     elo = data["data"]["current_data"]["ranking_in_tier"]
-                    print(f"Elo trouvé (structure alternative): {elo}")
+                    print(f"Elo trouvé (structure 2): {elo}")
                     return elo
+                    
+                # Structure 3: data -> mmr_change_to_last_game
+                elif "mmr_change_to_last_game" in data["data"]:
+                    elo = data["data"]["mmr_change_to_last_game"]
+                    print(f"Elo trouvé (structure 3): {elo}")
+                    return elo
+                
+                # Structure 4: parcourir tous les champs pour chercher elo ou rr
                 else:
-                    print(f"Structure de données inattendue: {data}")
+                    # Explorer la structure pour trouver un champ qui pourrait contenir l'elo
+                    print("Exploration de la structure pour trouver l'elo...")
+                    
+                    # Si current_data existe
+                    if "current_data" in data["data"]:
+                        curr_data = data["data"]["current_data"]
+                        
+                        # Chercher différents champs possibles
+                        for field in ["elo", "ranking_in_tier", "rr"]:
+                            if field in curr_data:
+                                elo = curr_data[field]
+                                print(f"Elo trouvé (champ: {field}): {elo}")
+                                return elo
+                    
+                    print(f"Structure de données inattendue, impossible de trouver l'elo")
             else:
                 print(f"Données manquantes dans la réponse: {data}")
+                
         elif response.status_code == 401:
             print("Erreur d'authentification API. Vérifiez votre HENRIKDEV_API_KEY.")
         elif response.status_code == 404:
