@@ -17,6 +17,7 @@ else:
 # Charger les variables d'environnement
 dotenv_path = ".env"
 load_dotenv(dotenv_path)
+
 HENRIKDEV_API_KEY = os.getenv("HENRIKDEV_API_KEY")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
