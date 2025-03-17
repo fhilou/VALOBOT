@@ -72,9 +72,41 @@ try:
 except (ValueError, TypeError):
     CHANNEL_ID = 0
 
-# Fonction pour récupérer l'elo d'un joueur
+# Dictionnaire pour les noms de rang
+RANK_NAMES = {
+    0: "Unranked",
+    1: "Unranked",
+    2: "Unranked",
+    3: "Iron 1",
+    4: "Iron 2",
+    5: "Iron 3",
+    6: "Bronze 1",
+    7: "Bronze 2",
+    8: "Bronze 3",
+    9: "Silver 1",
+    10: "Silver 2",
+    11: "Silver 3",
+    12: "Gold 1",
+    13: "Gold 2",
+    14: "Gold 3",
+    15: "Platinum 1",
+    16: "Platinum 2",
+    17: "Platinum 3",
+    18: "Diamond 1",
+    19: "Diamond 2",
+    20: "Diamond 3",
+    21: "Ascendant 1",
+    22: "Ascendant 2",
+    23: "Ascendant 3",
+    24: "Immortal 1",
+    25: "Immortal 2",
+    26: "Immortal 3",
+    27: "Radiant"
+}
+
+# Fonction pour récupérer l'elo et le rang d'un joueur
 def fetch_elo(username, tag):
-    """Récupère l'elo d'un joueur via l'API HenrikDev"""
+    """Récupère l'elo et le rang d'un joueur via l'API HenrikDev"""
     try:
         # Nettoyer les données d'entrée
         username = username.strip()
@@ -115,12 +147,21 @@ def fetch_elo(username, tag):
             
             # Vérifier la structure de la réponse v1
             if "data" in data:
+                # Récupérer les informations de rang et d'elo
+                rank_info = {}
+                
                 if "currenttier" in data["data"]:
+                    rank_tier = data["data"]["currenttier"]
+                    rank_name = RANK_NAMES.get(rank_tier, "Inconnu")
+                    rank_info["tier"] = rank_tier
+                    rank_info["name"] = rank_name
+                    
                     # Récupérer les RR de la réponse
                     if "ranking_in_tier" in data["data"]:
                         elo = data["data"]["ranking_in_tier"]
-                        print(f"Elo trouvé: {elo} RR")
-                        return elo
+                        rank_info["elo"] = elo
+                        print(f"Rang trouvé: {rank_name}, Elo: {elo} RR")
+                        return rank_info
                     else:
                         print("Données de ranking_in_tier manquantes")
                         return None
@@ -172,9 +213,9 @@ async def help_command(ctx):
     """Affiche la liste des commandes disponibles"""
     help_message = (
         "**Liste des commandes :**\n"
-        "`!elo <joueur>` ou `!elo <joueur#tag>` - Affiche l'elo d'un joueur spécifique.\n"
+        "`!elo <joueur>` ou `!elo <joueur#tag>` - Affiche l'elo et le rang d'un joueur spécifique.\n"
         "`!recap` - Affiche les gains/pertes d'elo de la journée.\n"
-        "`!test` - Envoie le message du jour avec l'élo actuel des joueurs.\n"
+        "`!test` - Envoie le message du jour avec le rang et l'élo actuel des joueurs.\n"
         "`!help` - Affiche cette aide."
     )
     await ctx.send(help_message)
@@ -183,7 +224,7 @@ async def help_command(ctx):
 @bot.command()
 async def elo(ctx, *, player_info: str = None):
     """
-    Affiche l'elo d'un joueur spécifique
+    Affiche l'elo et le rang d'un joueur spécifique
     Usage: !elo joueur#tag ou !elo joueur tag
     """
     if player_info is None:
@@ -208,12 +249,14 @@ async def elo(ctx, *, player_info: str = None):
         # Message d'attente pour indiquer que le bot travaille
         loading_msg = await ctx.send(f"🔍 Recherche de l'elo pour **{username}#{tag}**...")
             
-        # Récupérer l'elo
-        elo = fetch_elo(username, tag)
-        if elo is not None:
-            await loading_msg.edit(content=f"**{username}#{tag}** a un elo de **{elo} RR**.")
+        # Récupérer l'elo et le rang
+        rank_info = fetch_elo(username, tag)
+        if rank_info is not None:
+            rank_name = rank_info["name"]
+            elo = rank_info["elo"]
+            await loading_msg.edit(content=f"**{username}#{tag}** est **{rank_name}** avec **{elo} RR**.")
         else:
-            await loading_msg.edit(content=f"Impossible de récupérer l'élo de **{username}#{tag}**. Vérifiez le nom d'utilisateur et le tag.")
+            await loading_msg.edit(content=f"Impossible de récupérer les informations de **{username}#{tag}**. Vérifiez le nom d'utilisateur et le tag.")
             
     except Exception as e:
         await ctx.send(f"❌ Erreur lors de la récupération de l'elo: {str(e)}")
@@ -266,13 +309,14 @@ async def initialize_elo_data():
         for player in TRACKED_PLAYERS:
             username = player["username"]
             tag = player["tag"]
-            current_elo = fetch_elo(username, tag)
+            rank_info = fetch_elo(username, tag)
             
-            if current_elo is not None:
+            if rank_info is not None:
                 elo_data[username] = {
                     "tag": tag,
-                    "start": current_elo,
-                    "current": current_elo
+                    "start": rank_info["elo"],
+                    "current": rank_info["elo"],
+                    "rank": rank_info["name"]
                 }
                 success_count += 1
         
@@ -283,6 +327,7 @@ async def initialize_elo_data():
         if CHANNEL_ID != 0:
             channel = bot.get_channel(CHANNEL_ID)
             if channel:
+                message = f"✅ Données
                 message = f"✅ Données d'elo initialisées pour {success_count}/{len(TRACKED_PLAYERS)} joueurs."
                 await channel.send(message)
         
@@ -307,15 +352,19 @@ async def recap(ctx):
     for player in list(elo_data.keys()):
         old_elo = elo_data[player]["start"]
         tag = elo_data[player]["tag"]
-        new_elo = fetch_elo(player, tag)
+        rank_info = fetch_elo(player, tag)
         
-        if new_elo is not None:
+        if rank_info is not None:
+            new_elo = rank_info["elo"]
+            rank_name = rank_info["name"]
             diff = new_elo - old_elo
-            message += f"{player}: {'+' if diff >= 0 else ''}{diff} RR\n"
+            message += f"{player} ({rank_name}): {'+' if diff >= 0 else ''}{diff} RR\n"
             elo_data[player]["current"] = new_elo
+            elo_data[player]["rank"] = rank_name
         else:
             message += f"{player}: Données indisponibles\n"
-            save_elo_data(elo_data)
+            
+    save_elo_data(elo_data)
     await loading_msg.edit(content=message)
 
 # Commande !test
@@ -331,13 +380,19 @@ async def test(ctx):
 
 # Fonction pour générer le message du matin
 async def generate_morning_message():
-    """Génère le message avec l'élo des joueurs"""
+    """Génère le message avec l'élo et le rang des joueurs"""
     message = "**🎯 Réveillez-vous les loosers, c'est l'heure de VALO !**\n"
     for player in TRACKED_PLAYERS:
         username = player["username"]
         tag = player["tag"]
-        elo = fetch_elo(username, tag)
-        message += f"{username}: {elo if elo is not None else 'N/A'} RR\n"
+        rank_info = fetch_elo(username, tag)
+        
+        if rank_info is not None:
+            rank_name = rank_info["name"]
+            elo = rank_info["elo"]
+            message += f"{username}: {rank_name} ({elo} RR)\n"
+        else:
+            message += f"{username}: N/A\n"
     return message
 
 # Commande pour recharger le bot
@@ -355,14 +410,20 @@ async def reload(ctx):
         for player in TRACKED_PLAYERS:
             username = player["username"]
             tag = player["tag"]
-            current_elo = fetch_elo(username, tag)
+            rank_info = fetch_elo(username, tag)
             
-            if current_elo is not None:
+            if rank_info is not None:
                 if username not in elo_data:
-                    elo_data[username] = {"tag": tag, "start": current_elo, "current": current_elo}
+                    elo_data[username] = {
+                        "tag": tag, 
+                        "start": rank_info["elo"], 
+                        "current": rank_info["elo"],
+                        "rank": rank_info["name"]
+                    }
                 else:
                     # Mettre à jour seulement la valeur actuelle, pas la valeur de départ
-                    elo_data[username]["current"] = current_elo
+                    elo_data[username]["current"] = rank_info["elo"]
+                    elo_data[username]["rank"] = rank_info["name"]
                 success_count += 1
         
         save_elo_data(elo_data)
