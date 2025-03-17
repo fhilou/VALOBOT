@@ -73,8 +73,6 @@ except (ValueError, TypeError):
     CHANNEL_ID = 0
 
 # Fonction pour récupérer l'elo d'un joueur
-# Remplacez la fonction fetch_elo actuelle par celle-ci:
-
 def fetch_elo(username, tag):
     """Récupère l'elo d'un joueur via l'API HenrikDev"""
     try:
@@ -151,8 +149,9 @@ async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     print("🚀 Bot prêt à l'emploi !")
     
-    # Démarrer la tâche automatique après que le bot soit prêt
+    # Démarrer les tâches automatiques après que le bot soit prêt
     send_morning_message.start()
+    auto_init_elo_at_midnight.start()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -176,8 +175,6 @@ async def help_command(ctx):
         "`!elo <joueur>` ou `!elo <joueur#tag>` - Affiche l'elo d'un joueur spécifique.\n"
         "`!recap` - Affiche les gains/pertes d'elo de la journée.\n"
         "`!test` - Envoie le message du jour avec l'élo actuel des joueurs.\n"
-        "`!setchannel` - Définit le canal pour le message automatique du matin.\n"
-        "`!initelo` - (Admin) Initialise le suivi d'elo pour la journée.\n"
         "`!help` - Affiche cette aide."
     )
     await ctx.send(help_message)
@@ -257,44 +254,11 @@ def save_elo_data(data):
         print(f"⚠️ Erreur lors de la sauvegarde des données d'elo: {str(e)}")
         return False
 
-# Commande !recap
-@bot.command()
-async def recap(ctx):
-    """Affiche le récapitulatif des gains/pertes d'elo aujourd'hui"""
-    elo_data = load_elo_data()
-    
-    if not elo_data:
-        await ctx.send("**Récapitulatif des gains/pertes d'elo aujourd'hui :** Aucune donnée disponible. Utilisez `!initelo` pour initialiser les données.")
-        return
-        
-    # Message d'attente
-    loading_msg = await ctx.send("⏳ Calcul des gains/pertes d'elo en cours...")
-        
-    message = "**Récapitulatif des gains/pertes d'elo aujourd'hui :**\n"
-    
-    for player in list(elo_data.keys()):
-        old_elo = elo_data[player]["start"]
-        tag = elo_data[player]["tag"]
-        new_elo = fetch_elo(player, tag)
-        
-        if new_elo is not None:
-            diff = new_elo - old_elo
-            message += f"{player}: {'+' if diff >= 0 else ''}{diff} RR\n"
-            elo_data[player]["current"] = new_elo
-        else:
-            message += f"{player}: Données indisponibles\n"
-
-    save_elo_data(elo_data)
-    await loading_msg.edit(content=message)
-
-# Commande !initelo
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def initelo(ctx):
-    """Initialise ou réinitialise les données d'elo pour les joueurs suivis (Admin uniquement)"""
+# Fonction pour initialiser automatiquement les données d'elo
+async def initialize_elo_data():
+    """Initialise les données d'elo pour les joueurs suivis"""
     try:
-        # Message d'attente
-        loading_msg = await ctx.send("⏳ Initialisation des données d'elo en cours...")
+        print("⏳ Initialisation automatique des données d'elo...")
         
         elo_data = {}
         success_count = 0
@@ -313,18 +277,46 @@ async def initelo(ctx):
                 success_count += 1
         
         save_elo_data(elo_data)
+        print(f"✅ Données d'elo initialisées pour {success_count}/{len(TRACKED_PLAYERS)} joueurs.")
         
-        # Afficher les joueurs initialisés
-        if success_count > 0:
-            message = f"✅ Données d'elo initialisées pour {success_count}/{len(TRACKED_PLAYERS)} joueurs.\n\n**Joueurs suivis:**\n"
-            for player, data in elo_data.items():
-                message += f"{player}: {data['current']} RR\n"
-            await loading_msg.edit(content=message)
-        else:
-            await loading_msg.edit(content="❌ Impossible d'initialiser les données d'elo. Vérifiez la connexion à l'API.")
+        # Envoyer un message dans le canal si configuré
+        if CHANNEL_ID != 0:
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                message = f"✅ Données d'elo initialisées pour {success_count}/{len(TRACKED_PLAYERS)} joueurs."
+                await channel.send(message)
         
     except Exception as e:
-        await ctx.send(f"❌ Erreur lors de l'initialisation des données d'elo: {str(e)}")
+        print(f"❌ Erreur lors de l'initialisation des données d'elo: {str(e)}")
+
+# Commande !recap
+@bot.command()
+async def recap(ctx):
+    """Affiche le récapitulatif des gains/pertes d'elo aujourd'hui"""
+    elo_data = load_elo_data()
+    
+    if not elo_data:
+        await ctx.send("**Récapitulatif des gains/pertes d'elo aujourd'hui :** Aucune donnée disponible. L'initialisation automatique se fera à minuit.")
+        return
+        
+    # Message d'attente
+    loading_msg = await ctx.send("⏳ Calcul des gains/pertes d'elo en cours...")
+        
+    message = "**Récapitulatif des gains/pertes d'elo aujourd'hui :**\n"
+    
+    for player in list(elo_data.keys()):
+        old_elo = elo_data[player]["start"]
+        tag = elo_data[player]["tag"]
+        new_elo = fetch_elo(player, tag)
+        
+        if new_elo is not None:
+            diff = new_elo - old_elo
+            message += f"{player}: {'+' if diff >= 0 else ''}{diff} RR\n"
+            elo_data[player]["current"] = new_elo
+        else:
+            message += f"{player}: Données indisponibles\n"
+            save_elo_data(elo_data)
+    await loading_msg.edit(content=message)
 
 # Commande !test
 @bot.command()
@@ -347,42 +339,6 @@ async def generate_morning_message():
         elo = fetch_elo(username, tag)
         message += f"{username}: {elo if elo is not None else 'N/A'} RR\n"
     return message
-
-# Commande pour définir le canal
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setchannel(ctx):
-    """Définit le canal actuel comme canal pour les messages automatiques"""
-    global CHANNEL_ID
-    try:
-        # Ouvrir/créer le fichier .env
-        env_file = ".env"
-        env_vars = {}
-        
-        # Lire les variables d'environnement existantes
-        if os.path.exists(env_file):
-            with open(env_file, "r") as file:
-                for line in file:
-                    if '=' in line:
-                        key, value = line.strip().split('=', 1)
-                        env_vars[key] = value
-        
-        # Mettre à jour la variable CHANNEL_ID
-        env_vars["CHANNEL_ID"] = str(ctx.channel.id)
-        
-        # Réécrire le fichier .env
-        with open(env_file, "w") as file:
-            for key, value in env_vars.items():
-                file.write(f"{key}={value}\n")
-        
-        # Mettre à jour la variable globale
-        CHANNEL_ID = ctx.channel.id
-        
-        await ctx.send(f"✅ Canal `{ctx.channel.name}` défini pour les messages automatiques !")
-        
-    except Exception as e:
-        await ctx.send(f"❌ Erreur lors de la définition du canal : {str(e)}")
-        print(f"Erreur détaillée lors de la définition du canal : {str(e)}")
 
 # Commande pour recharger le bot
 @bot.command()
@@ -439,11 +395,32 @@ async def send_morning_message():
     except Exception as e:
         print(f"❌ Erreur dans la tâche send_morning_message: {str(e)}")
 
+# Tâche automatique pour initialiser l'elo à minuit
+@tasks.loop(minutes=1)
+async def auto_init_elo_at_midnight():
+    """Initialise automatiquement les données d'elo tous les jours à minuit heure de Paris"""
+    try:
+        now = datetime.now(PARIS_TZ).time()
+        target_time = time(0, 0)  # Minuit
+        
+        # Vérifier si c'est minuit
+        if now.hour == target_time.hour and now.minute == target_time.minute:
+            print("🕛 Minuit : Initialisation automatique des données d'elo...")
+            await initialize_elo_data()
+    except Exception as e:
+        print(f"❌ Erreur dans la tâche auto_init_elo_at_midnight: {str(e)}")
+
 @send_morning_message.before_loop
 async def before_morning_message():
     """Attendre que le bot soit prêt avant de démarrer la boucle"""
     await bot.wait_until_ready()
     print("⏳ Message automatique initialisé.")
+
+@auto_init_elo_at_midnight.before_loop
+async def before_auto_init_elo():
+    """Attendre que le bot soit prêt avant de démarrer la boucle"""
+    await bot.wait_until_ready()
+    print("⏳ Initialisation automatique d'elo à minuit configurée.")
 
 # Lancer le service web et le bot
 if __name__ == "__main__":
