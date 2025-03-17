@@ -327,8 +327,8 @@ async def initialize_elo_data():
         if CHANNEL_ID != 0:
             channel = bot.get_channel(CHANNEL_ID)
             if channel:
-    message = f"✅ Données d'elo initialisées pour {success_count}/{len(TRACKED_PLAYERS)} joueurs."
-            await channel.send(message)
+                message = f"✅ Données d'elo initialisées pour {success_count}/{len(TRACKED_PLAYERS)} joueurs."
+                await channel.send(message)
         
     except Exception as e:
         print(f"❌ Erreur lors de l'initialisation des données d'elo: {str(e)}")
@@ -494,5 +494,4 @@ if __name__ == "__main__":
         print("❌ Erreur : Token Discord invalide ou expiré !")
     except Exception as e:
         print(f"❌ Erreur lors du démarrage du bot : {str(e)}")
-
                
