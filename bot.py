@@ -482,6 +482,240 @@ async def before_auto_init_elo():
     await bot.wait_until_ready()
     print("⏳ Initialisation automatique d'elo à minuit configurée.")
 
+# Ajoutez ce code à votre bot.py existant, juste avant la section "if __name__ == "__main__":"
+
+# Importation du module de suivi d'elo LoL
+# Supposons que le fichier s'appelle lol_elo_tracker.py et est dans le même dossier
+import lol_elo_tracker
+
+# Liste des joueurs LoL suivis
+LOL_TRACKED_PLAYERS = [
+    {"username": "Faker", "region": "kr"},
+    {"username": "Rekkles", "region": "euw"},
+    {"username": "Caedrel", "region": "euw"},
+    # Ajoutez vos joueurs ici
+]
+
+# Commande !lolelo
+@bot.command()
+async def lolelo(ctx, *, player_info: str = None):
+    """
+    Affiche l'elo et le rang d'un joueur LoL spécifique
+    Usage: !lolelo joueur région
+    """
+    if player_info is None:
+        await ctx.send("❌ Format incorrect. Utilisez `!lolelo joueur région` (par exemple: `!lolelo Faker kr`)")
+        return
+        
+    try:
+        # Séparer le nom d'utilisateur et la région
+        parts = player_info.rsplit(" ", 1)
+        if len(parts) != 2:
+            await ctx.send("❌ Format incorrect. Utilisez `!lolelo joueur région` (par exemple: `!lolelo Faker kr`)")
+            return
+        
+        username = parts[0].strip()
+        region = parts[1].strip().lower()
+            
+        # Message d'attente pour indiquer que le bot travaille
+        loading_msg = await ctx.send(f"🔍 Recherche de l'elo pour **{username}** ({region})...")
+            
+        # Récupérer l'elo et le rang
+        rank_info = lol_elo_tracker.fetch_lol_elo(username, region)
+        if rank_info is not None:
+            rank_name = rank_info["name"]
+            lp = rank_info["lp"]
+            await loading_msg.edit(content=f"**{username}** ({region}) est **{rank_name}** avec **{lp} LP**.")
+        else:
+            await loading_msg.edit(content=f"Impossible de récupérer les informations de **{username}** ({region}). Vérifiez le nom d'utilisateur et la région.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Erreur lors de la récupération de l'elo: {str(e)}")
+
+# Commande !lolrecap
+@bot.command()
+async def lolrecap(ctx):
+    """Affiche le récapitulatif des gains/pertes de LP aujourd'hui"""
+    elo_data = lol_elo_tracker.load_elo_data()
+    
+    if not elo_data:
+        await ctx.send("**Récapitulatif des gains/pertes de LP aujourd'hui :** Aucune donnée disponible. L'initialisation automatique se fera à minuit.")
+        return
+        
+    # Message d'attente
+    loading_msg = await ctx.send("⏳ Calcul des gains/pertes de LP en cours...")
+        
+    message = "**Récapitulatif des gains/pertes de LP aujourd'hui :**\n"
+    
+    for player in list(elo_data.keys()):
+        region = elo_data[player]["region"]
+        old_lp = elo_data[player]["start"]["lp"]
+        old_tier = elo_data[player]["start"]["tier"]
+        old_division = elo_data[player]["start"]["division"]
+        
+        rank_info = lol_elo_tracker.fetch_lol_elo(player, region)
+        
+        if rank_info is not None:
+            new_lp = rank_info["lp"]
+            new_tier = rank_info["tier"]
+            new_division = rank_info["division"]
+            rank_name = rank_info["name"]
+            
+            diff = lol_elo_tracker.calculate_lp_diff(
+                old_lp, old_tier, old_division,
+                new_lp, new_tier, new_division
+            )
+            
+            message += f"{player} ({rank_name}): {'+' if diff >= 0 else ''}{diff} LP\n"
+            
+            # Mettre à jour les données actuelles
+            elo_data[player]["current"]["lp"] = new_lp
+            elo_data[player]["current"]["tier"] = new_tier
+            elo_data[player]["current"]["division"] = new_division
+            elo_data[player]["rank"] = rank_name
+        else:
+            message += f"{player}: Données indisponibles\n"
+            
+    lol_elo_tracker.save_elo_data(elo_data)
+    await loading_msg.edit(content=message)
+
+# Fonction pour initialiser automatiquement les données d'elo LoL
+async def initialize_lol_elo_data():
+    """Initialise les données d'elo pour les joueurs LoL suivis"""
+    try:
+        print("⏳ Initialisation automatique des données d'elo LoL...")
+        
+        elo_data = lol_elo_tracker.load_elo_data()
+        success_count = 0
+        
+        for player in LOL_TRACKED_PLAYERS:
+            username = player["username"]
+            region = player["region"]
+            rank_info = lol_elo_tracker.fetch_lol_elo(username, region)
+            
+            if rank_info is not None:
+                elo_data[username] = {
+                    "region": region,
+                    "start": {
+                        "lp": rank_info["lp"],
+                        "tier": rank_info["tier"],
+                        "division": rank_info["division"]
+                    },
+                    "current": {
+                        "lp": rank_info["lp"],
+                        "tier": rank_info["tier"],
+                        "division": rank_info["division"]
+                    },
+                    "rank": rank_info["name"]
+                }
+                success_count += 1
+        
+        lol_elo_tracker.save_elo_data(elo_data)
+        print(f"✅ Données d'elo LoL initialisées pour {success_count}/{len(LOL_TRACKED_PLAYERS)} joueurs.")
+        
+        # Envoyer un message dans le canal si configuré
+        if CHANNEL_ID != 0:
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                message = f"✅ Données d'elo LoL initialisées pour {success_count}/{len(LOL_TRACKED_PLAYERS)} joueurs."
+                await channel.send(message)
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de l'initialisation des données d'elo LoL: {str(e)}")
+
+# Commande !loltest
+@bot.command()
+async def loltest(ctx):
+    """Envoie le message du matin avec l'elo des joueurs LoL"""
+    loading_msg = await ctx.send("⏳ Génération du message du matin pour LoL...")
+    try:
+        message = await generate_lol_morning_message()
+        await loading_msg.edit(content=message)
+    except Exception as e:
+        await loading_msg.edit(content=f"❌ Erreur lors de la génération du message: {str(e)}")
+
+# Fonction pour générer le message du matin pour LoL
+async def generate_lol_morning_message():
+    """Génère le message avec l'élo et le rang des joueurs LoL"""
+    message = "**🎮 C'est l'heure de LoL, champions ! Voici vos rangs actuels :**\n"
+    for player in LOL_TRACKED_PLAYERS:
+        username = player["username"]
+        region = player["region"]
+        rank_info = lol_elo_tracker.fetch_lol_elo(username, region)
+        
+        if rank_info is not None:
+            rank_name = rank_info["name"]
+            lp = rank_info["lp"]
+            message += f"{username}: {rank_name} ({lp} LP)\n"
+        else:
+            message += f"{username}: N/A\n"
+    return message
+
+# Ajouter la tâche d'initialisation de l'elo LoL à minuit
+@tasks.loop(minutes=1)
+async def auto_init_lol_elo_at_midnight():
+    """Initialise automatiquement les données d'elo LoL tous les jours à minuit heure de Paris"""
+    try:
+        now = datetime.now(PARIS_TZ).time()
+        target_time = time(0, 0)  # Minuit
+        
+        # Vérifier si c'est minuit
+        if now.hour == target_time.hour and now.minute == target_time.minute:
+            print("🕛 Minuit : Initialisation automatique des données d'elo LoL...")
+            await initialize_lol_elo_data()
+    except Exception as e:
+        print(f"❌ Erreur dans la tâche auto_init_lol_elo_at_midnight: {str(e)}")
+
+# Ajouter la tâche d'envoi de message LoL
+@tasks.loop(minutes=1)
+async def send_lol_morning_message():
+    """Envoie automatiquement le message LoL tous les jours à 9h30 heure de Paris"""
+    try:
+        if CHANNEL_ID == 0:
+            print("⚠️ Aucun canal défini pour le message automatique")
+            return
+        
+        now = datetime.now(PARIS_TZ).time()
+        target_time = time(9, 30)  # 9h30 du matin
+        
+        # Vérifier si c'est l'heure d'envoyer le message
+        if now.hour == target_time.hour and now.minute == target_time.minute:
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                message = await generate_lol_morning_message()
+                await channel.send(message)
+                print(f"✅ Message du matin LoL envoyé dans le canal {channel.name}")
+            else:
+                print(f"⚠️ Impossible de trouver le canal ID: {CHANNEL_ID}")
+    except Exception as e:
+        print(f"❌ Erreur dans la tâche send_lol_morning_message: {str(e)}")
+
+# Initialiser les tâches automatiques
+@send_lol_morning_message.before_loop
+async def before_lol_morning_message():
+    """Attendre que le bot soit prêt avant de démarrer la boucle"""
+    await bot.wait_until_ready()
+    print("⏳ Message automatique LoL initialisé.")
+
+@auto_init_lol_elo_at_midnight.before_loop
+async def before_auto_init_lol_elo():
+    """Attendre que le bot soit prêt avant de démarrer la boucle"""
+    await bot.wait_until_ready()
+    print("⏳ Initialisation automatique d'elo LoL à minuit configurée.")
+
+# Dans la fonction on_ready, ajoutez ces lignes pour démarrer les nouvelles tâches :
+@bot.event
+async def on_ready():
+    print(f"✅ Connecté en tant que {bot.user}")
+    print("🚀 Bot prêt à l'emploi !")
+    
+    # Démarrer les tâches automatiques après que le bot soit prêt
+    send_morning_message.start()
+    auto_init_elo_at_midnight.start()
+    # Nouvelles tâches pour LoL
+    send_lol_morning_message.start()
+    auto_init_lol_elo_at_midnight.start()
+
 # Lancer le service web et le bot
 if __name__ == "__main__":
     try:
