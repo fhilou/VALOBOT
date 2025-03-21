@@ -168,11 +168,11 @@ if __name__ == "__main__":
     TRACKED_PLAYERS = [
         {"username": "Faker", "region": "kr"},
         {"username": "irù", "region": "euw"},
-        {"username": "fhilou", "region": "euw"}
-        {"username": "igosano", "region": "euw"}
-        {"username": "Anemonia", "region": "euw"}
-        {"username": "Hartware", "region": "euw"}
-        {"username": "JokyJokSsj", "region": "euw"}
+        {"username": "fhilou", "region": "euw"},
+        {"username": "igosano", "region": "euw"},
+        {"username": "Anemonia", "region": "euw"},
+        {"username": "Hartware", "region": "euw"},
+        {"username": "JokyJokSsj", "region": "euw"},
     ]  
     
     # Initialiser ou charger les données
