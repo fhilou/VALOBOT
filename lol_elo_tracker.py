@@ -167,9 +167,13 @@ if __name__ == "__main__":
     # Exemple de joueurs à suivre
     TRACKED_PLAYERS = [
         {"username": "Faker", "region": "kr"},
-        {"username": "Caedrel", "region": "euw"},
-        {"username": "Rekkles", "region": "euw"}
-    ]
+        {"username": "irù", "region": "euw"},
+        {"username": "fhilou", "region": "euw"}
+        {"username": "igosano", "region": "euw"}
+        {"username": "Anemonia", "region": "euw"}
+        {"username": "Hartware", "region": "euw"}
+        {"username": "JokyJokSsj", "region": "euw"}
+    ]  
     
     # Initialiser ou charger les données
     elo_data = load_elo_data()
